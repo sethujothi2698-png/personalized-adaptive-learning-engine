@@ -1,11 +1,11 @@
 import streamlit as st
 import json
 import os
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 st.set_page_config(page_title="Adaptive Learning Engine", page_icon="🎓", layout="wide")
 
-# API Key config
 api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", None))
 
 st.sidebar.title("⚙️ Configuration")
@@ -26,45 +26,11 @@ if "initialized" not in st.session_state:
     st.session_state.last_feedback = None
 
 if not api_key:
-    st.error("⚠️ GEMINI_API_KEY not found in Streamlit Secrets! Please add it in App Settings.")
+    st.error("⚠️ GEMINI_API_KEY not found in Streamlit Secrets! Please configure it in settings.")
     st.stop()
 
-# Configure API
-genai.configure(api_key=api_key.strip())
-
-@st.cache_resource
-def get_available_model():
-    """Auto-detect available model for this API key to avoid NotFound error."""
-    preferred_models = [
-        "models/gemini-1.5-flash",
-        "models/gemini-1.5-flash-latest",
-        "models/gemini-pro",
-        "gemini-1.5-flash",
-        "gemini-pro"
-    ]
-    try:
-        available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        for pref in preferred_models:
-            if pref in available:
-                return pref
-        if available:
-            return available[0]
-    except Exception:
-        pass
-    return "gemini-1.5-flash"
-
-selected_model_name = get_available_model()
-model = genai.GenerativeModel(model_name=selected_model_name)
-
-def clean_json_response(raw_text):
-    text = raw_text.strip()
-    if text.startswith("```json"):
-        text = text[7:]
-    elif text.startswith("```"):
-        text = text[3:]
-    if text.endswith("```"):
-        text = text[:-3]
-    return json.loads(text.strip())
+# Initialize Client
+client = genai.Client(api_key=api_key.strip())
 
 def generate_question(topic, difficulty, previous_gaps):
     prompt = f"""
@@ -76,14 +42,18 @@ def generate_question(topic, difficulty, previous_gaps):
     Generate a multiple-choice question testing the user's understanding.
     If there are known gaps, tailor the question to test/reinforce those specific concepts.
     
-    Return ONLY a valid JSON object (no markdown, no extra explanation) with keys:
+    Return pure JSON with keys:
     - "question": string
     - "options": list of 4 strings
     - "correct_answer": string (exact match to one option)
     - "concept_tested": string
     """
-    response = model.generate_content(prompt)
-    return clean_json_response(response.text)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(response_mime_type="application/json")
+    )
+    return json.loads(response.text)
 
 def generate_remediation(question_obj, user_answer):
     prompt = f"""
@@ -97,20 +67,23 @@ def generate_remediation(question_obj, user_answer):
     1. A precise diagnosis of the conceptual misunderstanding / gap.
     2. A short, crystal-clear remedial explanation to correct the misunderstanding.
     
-    Return ONLY a valid JSON object (no markdown, no extra text) with keys:
+    Return pure JSON with keys:
     - "gap_summary": short string summarizing the gap
     - "explanation": string with clear concept clarification
     """
-    response = model.generate_content(prompt)
-    return clean_json_response(response.text)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(response_mime_type="application/json")
+    )
+    return json.loads(response.text)
 
-# Main Screen
 st.title("🎓 Personalized Adaptive Learning Engine")
 st.caption("WO-034: Real-time diagnostic quiz with instant remedial adaptation")
 
 if not st.session_state.initialized:
     if st.button("Start Diagnostic Session", type="primary"):
-        with st.spinner("Generating first diagnostic question..."):
+        with st.spinner("Generating first question..."):
             st.session_state.current_question = generate_question(topic, difficulty, [])
             st.session_state.initialized = True
             st.rerun()
@@ -139,14 +112,14 @@ with col_quiz:
             else:
                 with st.spinner("Analyzing learning gap..."):
                     remediation = generate_remediation(q, selected_option)
-                    st.session_state.learning_gaps.append(remediation.get("gap_summary", "Concept Gap"))
+                    st.session_state.learning_gaps.append(remediation.get("gap_summary", "Gap identified"))
                     st.session_state.last_feedback = {
                         "is_correct": False,
                         "gap": remediation.get("gap_summary", ""),
                         "explanation": remediation.get("explanation", "")
                     }
             
-            with st.spinner("Adapting next question to your pace..."):
+            with st.spinner("Adapting next question to your learning pace..."):
                 st.session_state.current_question = generate_question(
                     topic, difficulty, st.session_state.learning_gaps
                 )
