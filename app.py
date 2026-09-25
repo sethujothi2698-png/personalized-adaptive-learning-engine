@@ -31,7 +31,7 @@ if "initialized" not in st.session_state:
 
 def get_client():
     if not api_key:
-        st.error("API Key not found in secrets! Please configure GEMINI_API_KEY.")
+        st.error("API Key not found! Please add GEMINI_API_KEY in Streamlit Secrets.")
         return None
     return genai.Client(api_key=api_key)
 
@@ -52,7 +52,7 @@ def generate_question(client, topic, difficulty, previous_gaps):
     - "concept_tested": string
     """
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-1.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(response_mime_type="application/json")
     )
@@ -75,7 +75,7 @@ def generate_remediation(client, question_obj, user_answer):
     - "explanation": string with clear concept clarification
     """
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-1.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(response_mime_type="application/json")
     )
