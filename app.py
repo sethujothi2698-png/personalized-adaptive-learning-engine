@@ -1,13 +1,16 @@
 import streamlit as st
 import json
+import os
 from google import genai
 from google.genai import types
 
 st.set_page_config(page_title="Adaptive Learning Engine", page_icon="🎓", layout="wide")
 
+# Get API key from Streamlit Secrets or Environment
+api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", None))
+
 # Sidebar Configuration
 st.sidebar.title("⚙️ Configuration")
-api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
 topic = st.sidebar.text_input("Topic", value="Python Data Structures")
 difficulty = st.sidebar.selectbox("Difficulty", ["Beginner", "Intermediate", "Advanced"])
 
@@ -28,7 +31,7 @@ if "initialized" not in st.session_state:
 
 def get_client():
     if not api_key:
-        st.error("Please provide a Gemini API Key in the sidebar.")
+        st.error("API Key not found in secrets! Please configure GEMINI_API_KEY.")
         return None
     return genai.Client(api_key=api_key)
 
@@ -82,15 +85,13 @@ def generate_remediation(client, question_obj, user_answer):
 st.title("🎓 Personalized Adaptive Learning Engine")
 st.caption("WO-034: Real-time diagnostic quiz with instant remedial adaptation")
 
-if not api_key:
-    st.info("👈 Enter your Gemini API key in the sidebar to get started.")
-    st.stop()
-
 client = get_client()
+if not client:
+    st.stop()
 
 # Start session
 if not st.session_state.initialized:
-    if st.button("Start Diagnostic Session"):
+    if st.button("Start Diagnostic Session", type="primary"):
         with st.spinner("Generating first question..."):
             st.session_state.current_question = generate_question(client, topic, difficulty, [])
             st.session_state.initialized = True
